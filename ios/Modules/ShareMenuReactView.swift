@@ -9,6 +9,7 @@ import MobileCoreServices
 
 @objc(ShareMenuReactView)
 public class ShareMenuReactView: NSObject {
+
     static var viewDelegate: ReactShareViewDelegate?
 
     @objc
@@ -93,13 +94,16 @@ public class ShareMenuReactView: NSObject {
     }
 
     func extractDataFromContext(context: NSExtensionContext, withCallback callback: @escaping (String?, String?, NSException?) -> Void) {
+        print("Carl: extensionContext?.inputItems.count: \(context.inputItems.count)")
         let item:NSExtensionItem! = context.inputItems.first as? NSExtensionItem
+        print("Carl: item.attachments?.count: \(item.attachments?.count)")
         let attachments:[AnyObject]! = item.attachments
 
         var urlProvider:NSItemProvider! = nil
         var imageProvider:NSItemProvider! = nil
         var textProvider:NSItemProvider! = nil
         var dataProvider:NSItemProvider! = nil
+        var propertyListProvider:NSItemProvider! = nil
 
         for provider in attachments {
             if provider.hasItemConformingToTypeIdentifier(kUTTypeURL as String) {
@@ -114,6 +118,8 @@ public class ShareMenuReactView: NSObject {
             } else if provider.hasItemConformingToTypeIdentifier(kUTTypeData as String) {
                 dataProvider = provider as? NSItemProvider
                 break
+            } else if provider.hasItemConformingToTypeIdentifier(kUTTypePropertyList as String) {
+                propertyListProvider = provider as? NSItemProvider
             }
         }
 
@@ -161,10 +167,45 @@ public class ShareMenuReactView: NSObject {
             }
         }  else if (dataProvider != nil) {
             dataProvider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (item, error) in
-                let url: URL! = item as? URL
-
-                callback(url.absoluteString, self.extractMimeType(from: url), nil)
+                if error != nil {
+                    callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"error loading a data", userInfo:nil));
+                    return;
+                }
+                if let url = item as? URL {
+                    callback(url.absoluteString, self.extractMimeType(from: url), nil)
+                } else if let dictionary = item as? NSDictionary {
+                    guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
+                        callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"results missing Javascript preprocessing results", userInfo:nil));
+                        return;
+                    }
+                    do {
+                        let jsonData = try JSONSerialization.data(withJSONObject: results)
+                        let jsonString = String(data: jsonData, encoding: String.Encoding.utf8)!
+                        callback(jsonString, "text/json", nil)
+                    } catch {
+                        print(error.localizedDescription)
+                        callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"failed to JSON serialize dictionary \(error.localizedDescription)", userInfo:nil));
+                    }
+                } else {
+                    callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason: "data wasn't any supported type", userInfo: nil));
+                }
             }
+        } else if (propertyListProvider != nil) {
+            dataProvider.loadItem(forTypeIdentifier: kUTTypePropertyList as String, options: nil, completionHandler: { (decoder, error) in
+                if error != nil {
+                    callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"error loading a property list", userInfo:nil));
+                    return;
+                }
+                guard let dictionary = decoder as? NSDictionary else {
+                    callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"decoder wasn't a dictionary", userInfo:nil));
+                    return;
+                }
+                guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
+                    callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"results missing Javascript preprocessing results", userInfo:nil));
+                    return;
+                }
+                callback(results.description, "text/plain", nil)
+            })
         } else {
             callback(nil, nil, NSException(name: NSExceptionName(rawValue: "Error"), reason:"couldn't find provider", userInfo:nil))
         }

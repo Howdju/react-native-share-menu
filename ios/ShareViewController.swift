@@ -15,16 +15,16 @@ import RNShareMenu
 class ShareViewController: SLComposeServiceViewController {
   var hostAppId: String?
   var hostAppUrlScheme: String?
-  
+
   override func viewDidLoad() {
     super.viewDidLoad()
-    
+
     if let hostAppId = Bundle.main.object(forInfoDictionaryKey: HOST_APP_IDENTIFIER_INFO_PLIST_KEY) as? String {
       self.hostAppId = hostAppId
     } else {
       print("Error: \(NO_INFO_PLIST_INDENTIFIER_ERROR)")
     }
-    
+
     if let hostAppUrlScheme = Bundle.main.object(forInfoDictionaryKey: HOST_URL_SCHEME_INFO_PLIST_KEY) as? String {
       self.hostAppUrlScheme = hostAppUrlScheme
     } else {
@@ -32,34 +32,51 @@ class ShareViewController: SLComposeServiceViewController {
     }
   }
 
-    override func isContentValid() -> Bool {
-        // Do validation of contentText and/or NSExtensionContext attachments here
-        return true
+   override func isContentValid() -> Bool {
+     // Do validation of contentText and/or NSExtensionContext attachments here
+     return true
+   }
+
+  override func didSelectPost() {
+    // This is called after the user selects Post. Do the upload of contentText and/or NSExtensionContext attachments.
+   print("Carl: extensionContext?.inputItems.count: \(extensionContext?.inputItems.count)")
+    guard let item = extensionContext?.inputItems.first as? NSExtensionItem else {
+      cancelRequest()
+      return
     }
 
-    override func didSelectPost() {
-        // This is called after the user selects Post. Do the upload of contentText and/or NSExtensionContext attachments.
-      guard let item = extensionContext?.inputItems.first as? NSExtensionItem else {
-        cancelRequest()
-        return
-      }
+    handlePost(item)
+  }
 
-      handlePost(item)
-    }
-
-    override func configurationItems() -> [Any]! {
-        // To add configuration options via table cells at the bottom of the sheet, return an array of SLComposeSheetConfigurationItem here.
-        return []
-    }
+  override func configurationItems() -> [Any]! {
+    // To add configuration options via table cells at the bottom of the sheet, return an array of SLComposeSheetConfigurationItem here.
+    return []
+  }
 
   func handlePost(_ item: NSExtensionItem, extraData: [String:Any]? = nil) {
+//    let logger = Logger()
+//    logger.info("Carl be here.")
+    print("Carl: item.attachments?.count: \(item.attachments?.count)")
     guard let provider = item.attachments?.first else {
       cancelRequest()
       return
     }
 
-    if let data = extraData {
-      storeExtraData(data)
+    var allExtraData = extraData ?? [:]
+    if provider.hasItemConformingToTypeIdentifier(kUTTypeURL as String) {
+      provider.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil) { (urlItem, error) in
+        if error != nil {
+          print("Error getting associated URL: \(error.debugDescription)")
+        } else {
+          if let url = urlItem as? URL {
+            allExtraData.updateValue(url, forKey: kUTTypeURL as String)
+          }
+        }
+      }
+    }
+
+    if !allExtraData.isEmpty {
+      storeExtraData(allExtraData)
     } else {
       removeExtraData()
     }
@@ -98,7 +115,7 @@ class ShareViewController: SLComposeServiceViewController {
     userDefaults.removeObject(forKey: USER_DEFAULTS_EXTRA_DATA_KEY)
     userDefaults.synchronize()
   }
-  
+
   func storeText(withProvider provider: NSItemProvider) {
     provider.loadItem(forTypeIdentifier: kUTTypeText as String, options: nil) { (data, error) in
       guard (error == nil) else {
@@ -117,15 +134,15 @@ class ShareViewController: SLComposeServiceViewController {
         self.exit(withError: NO_APP_GROUP_ERROR)
         return
       }
-      
+
       userDefaults.set([DATA_KEY: text, MIME_TYPE_KEY: "text/plain"],
                        forKey: USER_DEFAULTS_KEY)
       userDefaults.synchronize()
-      
+
       self.openHostApp()
     }
   }
-  
+
   func storeUrl(withProvider provider: NSItemProvider) {
     provider.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil) { (data, error) in
       guard (error == nil) else {
@@ -144,15 +161,15 @@ class ShareViewController: SLComposeServiceViewController {
         self.exit(withError: NO_APP_GROUP_ERROR)
         return
       }
-      
+
       userDefaults.set([DATA_KEY: url.absoluteString, MIME_TYPE_KEY: "text/plain"],
                        forKey: USER_DEFAULTS_KEY)
       userDefaults.synchronize()
-      
+
       self.openHostApp()
     }
   }
-  
+
   func storeFile(withProvider provider: NSItemProvider) {
     provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (data, error) in
       guard (error == nil) else {
@@ -160,7 +177,7 @@ class ShareViewController: SLComposeServiceViewController {
         return
       }
       guard let url = data as? URL else {
-        self.exit(withError: COULD_NOT_FIND_IMG_ERROR)
+        self.storeJson(data!)
         return
       }
       guard let hostAppId = self.hostAppId else {
@@ -177,23 +194,56 @@ class ShareViewController: SLComposeServiceViewController {
         self.exit(withError: NO_APP_GROUP_ERROR)
         return
       }
-      
+
       let mimeType = url.extractMimeType()
       let fileExtension = url.pathExtension
       let fileName = UUID().uuidString
       let filePath = groupFileManagerContainer
         .appendingPathComponent("\(fileName).\(fileExtension)")
-      
+
       guard self.moveFileToDisk(from: url, to: filePath) else {
         self.exit(withError: COULD_NOT_SAVE_FILE_ERROR)
         return
       }
-      
+
       userDefaults.set([DATA_KEY: filePath.absoluteString,  MIME_TYPE_KEY: mimeType],
                        forKey: USER_DEFAULTS_KEY)
       userDefaults.synchronize()
-      
+
       self.openHostApp()
+    }
+  }
+
+  func storeJson(_ item: NSSecureCoding) {
+    guard let dictionary = item as? NSDictionary else {
+      self.exit(withError: COULD_NOT_FIND_DICTIONARY_ERROR)
+      return
+    }
+    guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
+      self.exit(withError: MISSING_JAVASCRIPT_PREPROCESSING_RESULTS_KEY)
+      return;
+    }
+    do {
+      let jsonData = try JSONSerialization.data(withJSONObject: results)
+      let jsonString = String(data: jsonData, encoding: String.Encoding.utf8)!
+
+      guard let hostAppId = self.hostAppId else {
+        self.exit(withError: NO_INFO_PLIST_INDENTIFIER_ERROR)
+        return
+      }
+      guard let userDefaults = UserDefaults(suiteName: "group.\(hostAppId)") else {
+        self.exit(withError: NO_APP_GROUP_ERROR)
+        return
+      }
+
+      userDefaults.set([DATA_KEY: jsonString, MIME_TYPE_KEY: "text/json"],
+              forKey: USER_DEFAULTS_KEY)
+      userDefaults.synchronize()
+
+      self.openHostApp()
+    } catch {
+      self.exit(withError: FAILED_JSON_SERIALIZATION)
+      return
     }
   }
 
@@ -207,40 +257,40 @@ class ShareViewController: SLComposeServiceViewController {
       print("Could not save file from \(srcUrl) to \(destUrl): \(error)")
       return false
     }
-    
+
     return true
   }
-  
+
   func exit(withError error: String) {
     print("Error: \(error)")
     cancelRequest()
   }
-  
+
   internal func openHostApp() {
     guard let urlScheme = self.hostAppUrlScheme else {
       exit(withError: NO_INFO_PLIST_URL_SCHEME_ERROR)
       return
     }
-    
+
     let url = URL(string: urlScheme)
     let selectorOpenURL = sel_registerName("openURL:")
     var responder: UIResponder? = self
-    
+
     while responder != nil {
       if responder?.responds(to: selectorOpenURL) == true {
         responder?.perform(selectorOpenURL, with: url)
       }
       responder = responder!.next
     }
-    
+
     completeRequest()
   }
-  
+
   func completeRequest() {
     // Inform the host that we're done, so it un-blocks its UI. Note: Alternatively you could call super's -didSelectPost, which will similarly complete the extension context.
     extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
   }
-  
+
   func cancelRequest() {
     extensionContext!.cancelRequest(withError: NSError())
   }

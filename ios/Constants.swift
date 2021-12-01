@@ -24,6 +24,9 @@ public let COULD_NOT_SAVE_FILE_ERROR = "Couldn't save file on disk"
 public let NO_EXTENSION_CONTEXT_ERROR = "No extension context attached"
 public let NO_DELEGATE_ERROR = "No ReactShareViewDelegate attached"
 public let COULD_NOT_FIND_ITEM_ERROR = "Couldn't find item attached to this share"
+public let COULD_NOT_FIND_DICTIONARY_ERROR = "Couldn't find dictionary attached to this share"
+public let MISSING_JAVASCRIPT_PREPROCESSING_RESULTS_KEY = "Missing JavaScript preprocessing results key"
+public let FAILED_JSON_SERIALIZATION = "Failed to serialize as JSON"
 
 // MARK: Keys
 

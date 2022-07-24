@@ -48,7 +48,6 @@ public let COLOR_BLUE_KEY = "Blue"
 public let COLOR_ALPHA_KEY = "Alpha"
 public let COLOR_TRANSPARENT_KEY = "Transparent"
 
-public let MIME_TYPE_KEY =  "mimeType"
 public let DATA_KEY =  "data"
 public let EXTRA_DATA_KEY =  "extraData"
 

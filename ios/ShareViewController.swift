@@ -10,7 +10,7 @@
 import MobileCoreServices
 import UIKit
 import Social
-import OSLog
+import os.log
 
 import RNShareMenu
 
@@ -124,14 +124,16 @@ class ShareViewController: SLComposeServiceViewController {
           return
         }
         self.openHostApp()
-      case .failure(let error):
-        Self.logger.error("\(error.localizedDescription, privacy: .public)")
+      case .failure(let failureError):
+        let failureErrorString = "\(failureError)"
+        Self.logger.error("Failed to extract share data in group container: \(failureErrorString)")
         do {
           try self.removeExtraData()
         } catch {
-          Self.logger.error("Failed to remove extra data: \(error.localizedDescription)")
+          let errorString = "\(error)"
+          Self.logger.error("Failed to remove extra data: \(errorString)")
         }
-        self.failRequest(error)
+        self.failRequest(failureError)
         return
       }
     }
@@ -166,20 +168,18 @@ class ShareViewController: SLComposeServiceViewController {
   }
 
   func store(_ shareData: ShareData) throws {
-    let jsonEncoder = JSONEncoder()
-    var json: String
+    var shareDataDict: [String: Any]
     do {
-      let jsonData = try jsonEncoder.encode(shareData)
-      json = String(data: jsonData, encoding: String.Encoding.utf8)!
+      shareDataDict = try shareData.toDict()
     } catch {
       throw RNSMError("Failed to serialize share data: \(error)")
     }
-    try storeUserDefault([DATA_KEY: json, MIME_TYPE_KEY: "text/json"], key: USER_DEFAULTS_KEY)
+    try storeUserDefault([DATA_KEY: shareDataDict], key: USER_DEFAULTS_KEY)
   }
 
   internal func openHostApp() {
-    openHostAppUrl()
     completeRequest()
+    openHostAppUrl()
   }
 
   func openHostAppUrl() {
@@ -200,7 +200,13 @@ class ShareViewController: SLComposeServiceViewController {
 
   func completeRequest() {
     // Inform the host that we're done, so it un-blocks its UI. Note: Alternatively you could call super's -didSelectPost, which will similarly complete the extension context.
-    extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+    extensionContext!.completeRequest(returningItems: []) {expired in
+      if expired {
+        Self.logger.warning("Extension context has completed request and was expired.")
+      } else {
+        Self.logger.trace("Extension context has completed and was NOT expired.")
+      }
+    }
   }
 
   // Log the error and cancel the request

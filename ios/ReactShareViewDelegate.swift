@@ -6,9 +6,11 @@
 //
 
 public protocol ReactShareViewDelegate {
-    func loadExtensionContext() -> NSExtensionContext
+  func dismissExtension(_ errorMessage: String?)
 
-    func openApp()
+  func openApp()
 
-    func continueInApp(with item: NSExtensionItem, and extraData: [String:Any]?)
+  func continueInApp(with extraData: [String:Any]?)
+  
+  func getShareData(_ completion: @escaping (Result<ShareData, Error>) -> Void)
 }

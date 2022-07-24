@@ -8,6 +8,11 @@
 // MARK: Error Codes
 public let DISMISS_SHARE_EXTENSION_WITH_ERROR_CODE = 1
 
+// MARK: Error Codes
+
+// A general error, when it wouldn't make sense to provide a more specific error code.
+public let ERROR_CODE = "react_native_share_menu_error"
+
 // MARK: Error Messages
 
 public let NO_URL_TYPES_ERROR_MESSAGE = "You have not defined CFBundleURLTypes in your Info.plist"

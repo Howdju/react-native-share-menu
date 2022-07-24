@@ -7,9 +7,16 @@
 //  Created by Gustavo Parreira on 29/07/2020.
 //
 
+import OSLog
+
 import RNShareMenu
 
 class ReactShareViewController: ShareViewController, RCTBridgeDelegate, ReactShareViewDelegate {
+  private static let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier!,
+    category: String(describing: ShareViewController.self)
+  )
+
   func sourceURL(for bridge: RCTBridge!) -> URL! {
 #if DEBUG
     return RCTBundleURLProvider.sharedSettings()?
@@ -18,7 +25,7 @@ class ReactShareViewController: ShareViewController, RCTBridgeDelegate, ReactSha
     return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
-
+  
   override func viewDidLoad() {
     super.viewDidLoad()
 
@@ -54,15 +61,45 @@ class ReactShareViewController: ShareViewController, RCTBridgeDelegate, ReactSha
     ShareMenuReactView.detachViewDelegate()
   }
 
-  func loadExtensionContext() -> NSExtensionContext {
-    return extensionContext!
+  func dismissExtension(_ errorMessage: String?) {
+    guard let extensionContext = self.extensionContext else {
+      Self.logger.error("Cannot dismissExtension because there is no extensionContext.")
+      return
+    }
+    
+    if errorMessage != nil {
+      extensionContext.cancelRequest(withError: RNSMError(errorMessage!))
+      return
+    }
+    
+    extensionContext.completeRequest(returningItems: [], completionHandler: nil)
+  }
+  
+  func getShareData(_ completion: @escaping (Result<ShareData, Error>) -> Void) {
+    guard let extensionContext = self.extensionContext else {
+      completion(.failure(RNSMError("Cannot getShareData because there is no extensionContext")))
+      return
+    }
+    guard let extensionItems = extensionContext.inputItems as? [NSExtensionItem] else {
+      completion(.failure(RNSMError("Cannot getShareData because there is no extensionContext")))
+      return
+    }
+
+    Task {
+      do {
+        let shareData = try await ShareDataExtractor.extractShareData(extensionItems)
+        completion(.success(shareData))
+      } catch {
+        completion(.failure(error))
+      }
+    }
   }
 
   func openApp() {
-    self.openHostApp()
+    super.openHostApp()
   }
 
-  func continueInApp(with item: NSExtensionItem, and extraData: [String:Any]?) {
-    handlePost(item, extraData: extraData)
+  func continueInApp(with extraData: [String: Any]?) {
+      handlePost(with: extraData)
   }
 }

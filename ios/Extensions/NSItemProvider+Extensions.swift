@@ -8,15 +8,27 @@
 import MobileCoreServices
 
 public extension NSItemProvider {
-    var isText: Bool {
+    var hasText: Bool {
         return hasItemConformingToTypeIdentifier(kUTTypeText as String)
     }
 
-    var isURL: Bool {
-        return hasItemConformingToTypeIdentifier(kUTTypeURL as String) && !isFileURL
+    var hasImage: Bool {
+        return hasItemConformingToTypeIdentifier(kUTTypeImage as String)
     }
 
-    var isFileURL: Bool {
+    var hasData: Bool {
+        return hasItemConformingToTypeIdentifier(kUTTypeData as String)
+    }
+
+    var hasUrl: Bool {
+        return hasItemConformingToTypeIdentifier(kUTTypeURL as String) && !hasFileUrl
+    }
+
+    var hasFileUrl: Bool {
         return hasItemConformingToTypeIdentifier(kUTTypeFileURL as String)
+    }
+    
+    var hasPropertyList: Bool {
+        return hasItemConformingToTypeIdentifier(kUTTypePropertyList as String)
     }
 }

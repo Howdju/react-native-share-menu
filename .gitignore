@@ -58,3 +58,9 @@ build/
 
 # IDE Files
 .idea/
+
+# VSCode
+/.vscode/
+
+# Android
+/android/.gradle/

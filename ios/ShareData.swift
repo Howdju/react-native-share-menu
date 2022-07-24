@@ -14,16 +14,35 @@ public struct ShareDataItem: Codable {
   // If itemGroup is set, then each of the values having the same itemGroup are
   // representations of the same item.
   let itemGroup: String?
+  // An optional string indicating the role of the item.
+  //
+  // In iOS, share data can come from multiple sources, such as the attributedTitle, attributedContent,
+  // and NSExtensionItem.attachments. Since these data sources may be redundant, we record
+  // their source as a 'role' in order to help select preferred representations of share data.
+  //
+  // Instead of calling this 'source', which would not be cross-platform since different platforms
+  // could have different sources, we call it 'role' to try and allow for different cross-platform
+  // sources contributing to the same role.
+  let role: String?
 
   init(_ value: String, _ mimeType: String) {
     self.value = value
     self.mimeType = mimeType
     self.itemGroup = nil
+    self.role = nil
   }
 
-  init(_ value: String, _ mimeType: String, _ itemGroup: String) {
+  init(_ value: String, _ mimeType: String, _ itemGroup: String?) {
     self.value = value
     self.mimeType = mimeType
     self.itemGroup = itemGroup
+    self.role = nil
+  }
+  
+  init(_ value: String, _ mimeType: String, _ itemGroup: String?, role: String?) {
+    self.value = value
+    self.mimeType = mimeType
+    self.itemGroup = itemGroup
+    self.role = role
   }
 }

@@ -8,20 +8,6 @@
 import OSLog
 import MobileCoreServices
 
-struct MimeValue {
-  let value: String
-  let mimeType: String
-  
-  init(_ value: String, mimeType: String) {
-    self.value = value
-    self.mimeType = mimeType
-  }
-}
-
-struct ProviderLoadError: Error {
-  let message: String
-}
-
 @objc(ShareMenuReactView)
 public class ShareMenuReactView: NSObject {
   private static let logger = Logger(

@@ -2,6 +2,18 @@
 import MobileCoreServices
 import OSLog
 
+struct ExtractedValue {
+  let value: String
+  let mimeType: String
+  let role: String
+  
+  init(_ value: String, mimeType: String, role: String) {
+    self.value = value
+    self.mimeType = mimeType
+    self.role = role
+  }
+}
+
 // Static utilities for extracting ShareData from an NSExtensionContext
 public struct ShareDataExtractor {
   private static let logger = Logger(
@@ -11,13 +23,28 @@ public struct ShareDataExtractor {
 
   public static func extractShareData(_ extensionItems: [NSExtensionItem]) async throws -> ShareData {
     var items = [ShareDataItem]()
-    var itemGroup = 1
+    var groupNumber = 1
     for extensionItem in extensionItems {
-      let mimeValues = try await getAttachmentValues(extensionItem)
-      for mimeValue in mimeValues {
-        items.append(ShareDataItem(mimeValue.value, mimeValue.mimeType, "ItemGroup \(itemGroup)"))
+      let itemGroup = "ItemGroup \(groupNumber)"
+
+      if let title = extensionItem.attributedTitle {
+        items.append(ShareDataItem(title.string, "text/plain", itemGroup, role: "title/text"))
+        if let html = try? title.toHtml() {
+          items.append(ShareDataItem(html, "text/html", itemGroup, role: "title/html"))
+        }
       }
-      itemGroup += 1
+
+      if let contentText = extensionItem.attributedContentText {
+        items.append(ShareDataItem(contentText.string, "text/plain", itemGroup, role: "content/text"))
+        if let contentHtml = try? contentText.toHtml() {
+          items.append(ShareDataItem(contentHtml, "text/html", itemGroup, role: "content/html"))
+        }
+      }
+      
+      for value in try await getAttachmentValues(extensionItem) {
+        items.append(ShareDataItem(value.value, value.mimeType, itemGroup, role: value.role))
+      }
+      groupNumber += 1
     }
     
     return ShareData(items: items)
@@ -53,7 +80,7 @@ public struct ShareDataExtractor {
           throw RNSMError("Item with file MIME type did not contain a valid URL (\(item))")
         }
         let newUrl = try copyFileToGroupContainer(from: url, into: appGroupId)
-        items.append(ShareDataItem(newUrl.absoluteString, item.mimeType))
+        items.append(ShareDataItem(newUrl.absoluteString, item.mimeType, item.itemGroup, role: item.role))
       }
     }
     
@@ -67,7 +94,7 @@ public struct ShareDataExtractor {
   // Returns the URL of the copy made inside the group container
   static func copyFileToGroupContainer(from url: URL, into appGroupId: String) throws -> URL {
     guard let applicationGroupContainerUrl = FileManager.default
-      .containerURL(forSecurityApplicationGroupIdentifier: "group.\(appGroupId)")
+      .containerURL(forSecurityApplicationGroupIdentifier: "\(appGroupId)")
     else {
       throw RNSMError("Unable to get container URL for app group ID: \(appGroupId)")
     }
@@ -92,53 +119,62 @@ public struct ShareDataExtractor {
     try FileManager.default.copyItem(at: srcUrl, to: destUrl)
   }
   
-  static func getAttachmentValues(_ extensionItem: NSExtensionItem) async throws -> [MimeValue] {
-    var mimeValues = [MimeValue]()
+  static func getAttachmentValues(_ extensionItem: NSExtensionItem) async throws -> [ExtractedValue] {
+    var extractedValues = [ExtractedValue]()
     
     guard let providers = extensionItem.attachments else {
       logger.error("Extension item had no attachments \(extensionItem)")
-      return mimeValues
+      return extractedValues
     }
     
     for provider in providers {
       if provider.hasUrl {
-        mimeValues.append(try await getUrl(from: provider))
+        extractedValues.append(try await getUrl(from: provider))
       }
       if provider.hasFileUrl {
-        mimeValues.append(try await getUrl(from: provider))
+        extractedValues.append(try await getFileUrl(from: provider))
       }
       if provider.hasImage {
-        mimeValues.append(try await getImage(from: provider))
+        extractedValues.append(try await getImage(from: provider))
       }
       if provider.hasText {
-        mimeValues.append(try await getText(from: provider))
+        extractedValues.append(try await getText(from: provider))
       }
       if provider.hasData {
         if let mimeValue = try await getData(from: provider) {
-          mimeValues.append(mimeValue)
+          extractedValues.append(mimeValue)
         }
       }
       if provider.hasPropertyList {
-        mimeValues.append(try await getPropertyList(from: provider))
+        extractedValues.append(try await getPropertyList(from: provider))
       }
     }
     
-    if mimeValues.isEmpty {
+    if extractedValues.isEmpty {
       throw RNSMError("Recognized no providers from share input attachments.")
     }
     
-    return mimeValues
+    return extractedValues
   }
   
-  static func getUrl(from provider: NSItemProvider) async throws -> MimeValue {
+  static func getUrl(from provider: NSItemProvider) async throws -> ExtractedValue {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil)
     guard let url = item as? URL else {
       throw RNSMError("URL provider did not provide a URL.")
     }
-    return MimeValue(url.absoluteString, mimeType: "text/uri-list")
+    return ExtractedValue(url.absoluteString, mimeType: "text/uri-list", role: "provider/url")
   }
   
-  static func getImage(from provider: NSItemProvider) async throws -> MimeValue {
+  static func getFileUrl(from provider: NSItemProvider) async throws -> ExtractedValue {
+    let item = try await provider.loadItem(forTypeIdentifier: kUTTypeFileURL as String, options: nil)
+    guard let url = item as? URL else {
+      throw RNSMError("File URL provider did not provide a URL.")
+    }
+    let mimeType = self.extractMimeType(from: url)
+    return ExtractedValue(url.absoluteString, mimeType: mimeType, role: "provider/file-url")
+  }
+  
+  static func getImage(from provider: NSItemProvider) async throws -> ExtractedValue {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypeImage as String, options: nil)
     if let imageUrl: URL = item as? URL {
       // Ensure the image has data
@@ -146,7 +182,7 @@ public struct ShareDataExtractor {
         throw RNSMError("Could not load contents of image URL.")
       }
       let mimeType = self.extractMimeType(from: imageUrl)
-      return MimeValue(imageUrl.absoluteString, mimeType: mimeType)
+      return ExtractedValue(imageUrl.absoluteString, mimeType: mimeType, role: "provider/image/url")
     }
     
     if let image = item as? UIImage {
@@ -158,28 +194,28 @@ public struct ShareDataExtractor {
       }
       
       try imageData.write(to: imageUrl)
-      return MimeValue(imageUrl.absoluteString, mimeType: "image/png")
+      return ExtractedValue(imageUrl.absoluteString, mimeType: "image/png", role: "provider/image/data")
     }
     
     throw RNSMError("Unsupported image provider item type: \(String(describing: item))")
   }
   
-  static func getText(from provider: NSItemProvider) async throws -> MimeValue {
+  static func getText(from provider: NSItemProvider) async throws -> ExtractedValue {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypeText as String, options: nil)
     guard let textValue = item as? String else {
       throw RNSMError("Text representation faild to coerce to text.")
     }
-    return MimeValue(textValue, mimeType: "text/plain")
+    return ExtractedValue(textValue, mimeType: "text/plain", role: "provider/text")
   }
   
-  static func getData(from provider: NSItemProvider) async throws -> MimeValue? {
+  static func getData(from provider: NSItemProvider) async throws -> ExtractedValue? {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil)
     if let string = item as? String {
-      return MimeValue(string, mimeType: "text/plain")
+      return ExtractedValue(string, mimeType: "text/plain", role: "provider/data/string")
     }
     if let url = item as? URL {
       let mimeType = self.extractMimeType(from: url)
-      return MimeValue(url.absoluteString, mimeType: mimeType)
+      return ExtractedValue(url.absoluteString, mimeType: mimeType, role: "provider/data/url")
     }
     if let dictionary = item as? NSDictionary {
       guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
@@ -188,7 +224,7 @@ public struct ShareDataExtractor {
       do {
         let jsonData = try JSONSerialization.data(withJSONObject: results)
         let jsonString = String(data: jsonData, encoding: String.Encoding.utf8)!
-        return MimeValue(jsonString, mimeType: "text/json")
+        return ExtractedValue(jsonString, mimeType: "text/json", role: "provider/data/javascript-preprocessing")
       } catch {
         throw RNSMError("Failed to decode Javascript preprocessing result JSON: \(error)");
       }
@@ -214,7 +250,7 @@ public struct ShareDataExtractor {
     return nil
   }
   
-  static func getPropertyList(from provider: NSItemProvider) async throws -> MimeValue {
+  static func getPropertyList(from provider: NSItemProvider) async throws -> ExtractedValue {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypePropertyList as String, options: nil)
     guard let dictionary = item as? NSDictionary else {
       throw RNSMError("Property list provider did not provide a dictionary.")
@@ -222,7 +258,7 @@ public struct ShareDataExtractor {
     guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
       throw RNSMError("Property list provider dictionary was missing Javascript preprocessing results")
     }
-    return MimeValue(results.description, mimeType: "text/plain")
+    return ExtractedValue(results.description, mimeType: "text/plain", role: "provider/property-list/javascript-preprocessing")
   }
   
   static func extractMimeType(from url: URL) -> String {

@@ -93,39 +93,41 @@ public struct ShareDataExtractor {
   }
   
   static func getAttachmentValues(_ extensionItem: NSExtensionItem) async throws -> [MimeValue] {
-    var items = [MimeValue]()
+    var mimeValues = [MimeValue]()
     
     guard let providers = extensionItem.attachments else {
       logger.error("Extension item had no attachments \(extensionItem)")
-      return items
+      return mimeValues
     }
     
     for provider in providers {
       if provider.hasUrl {
-        items.append(try await getUrl(from: provider))
+        mimeValues.append(try await getUrl(from: provider))
       }
       if provider.hasFileUrl {
-        items.append(try await getUrl(from: provider))
+        mimeValues.append(try await getUrl(from: provider))
       }
       if provider.hasImage {
-        items.append(try await getImage(from: provider))
+        mimeValues.append(try await getImage(from: provider))
       }
       if provider.hasText {
-        items.append(try await getText(from: provider))
+        mimeValues.append(try await getText(from: provider))
       }
       if provider.hasData {
-        items.append(try await getData(from: provider))
+        if let mimeValue = try await getData(from: provider) {
+          mimeValues.append(mimeValue)
+        }
       }
       if provider.hasPropertyList {
-        items.append(try await getPropertyList(from: provider))
+        mimeValues.append(try await getPropertyList(from: provider))
       }
     }
     
-    if items.isEmpty {
+    if mimeValues.isEmpty {
       throw RNSMError("Recognized no providers from share input attachments.")
     }
     
-    return items
+    return mimeValues
   }
   
   static func getUrl(from provider: NSItemProvider) async throws -> MimeValue {
@@ -170,8 +172,11 @@ public struct ShareDataExtractor {
     return MimeValue(textValue, mimeType: "text/plain")
   }
   
-  static func getData(from provider: NSItemProvider) async throws -> MimeValue {
+  static func getData(from provider: NSItemProvider) async throws -> MimeValue? {
     let item = try await provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil)
+    if let string = item as? String {
+      return MimeValue(string, mimeType: "text/plain")
+    }
     if let url = item as? URL {
       let mimeType = self.extractMimeType(from: url)
       return MimeValue(url.absoluteString, mimeType: mimeType)
@@ -188,7 +193,25 @@ public struct ShareDataExtractor {
         throw RNSMError("Failed to decode Javascript preprocessing result JSON: \(error)");
       }
     }
-    throw RNSMError("Unsupported data provider item type: \(String(describing: item))")
+    
+    // Add additional recognized types here.
+    
+    if let data = item as? Data {
+      Self.logger.info("Ignoring provider data that lacked more specific type: \(String(describing: data))")
+      return nil
+    }
+    
+#if DEBUG
+    // If possible, add additional types that are discovered here above before the check for Data.
+
+    // I'm not sure it's safe to use Mirror on an NSSecureCoding, so only do it in development
+    let mirror = Mirror(reflecting:item)
+    Self.logger.error("Unsupported data provider item type: \(String(describing: mirror.subjectType))")
+#else
+    Self.logger.error("Unsupported data provider item type: \(String(describing: item))")
+#endif
+    
+    return nil
   }
   
   static func getPropertyList(from provider: NSItemProvider) async throws -> MimeValue {

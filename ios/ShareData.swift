@@ -1,4 +1,4 @@
-public struct ShareData: Codable {
+public struct ShareData: Codable, Dictable {
     var items: [ShareDataItem]
 }
 

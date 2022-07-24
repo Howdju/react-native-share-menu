@@ -83,18 +83,28 @@ public class ShareMenuReactView: NSObject {
             resolve: @escaping RCTPromiseResolveBlock,
             reject: @escaping RCTPromiseRejectBlock) {
     guard let viewDelegate = Self.viewDelegate else {
-      Self.logger.error("data had no viewDelegate")
+      let message = "\(String(describing: Self.self)) had no viewDelegate"
+      Self.logger.error("\(message)")
+      reject(ERROR_CODE, message, nil)
       return
     }
 
     viewDelegate.getShareData() { result in
       switch result {
       case .success(let shareData):
-        resolve([DATA_KEY: shareData])
+        do {
+          let shareDataDict = try shareData.toDict()
+          resolve([DATA_KEY: shareDataDict])
+        } catch {
+          let message = "Failed to convert shareData to dict: \(error)"
+          Self.logger.error("\(message)")
+          reject(ERROR_CODE, message, error)
+        }
       case .failure(let error):
+        let errorString = "\(error)"
+        Self.logger.error("Failed to get shareData \(errorString)")
         reject(ERROR_CODE, "Failed to extract share data", error)
       }
     }
   }
 }
-

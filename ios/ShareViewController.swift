@@ -7,12 +7,12 @@
 //  Created by Gustavo Parreira on 26/07/2020.
 //
 
-import RNShareMenu
-
 import MobileCoreServices
 import UIKit
 import Social
 import OSLog
+
+import RNShareMenu
 
 class ShareViewController: SLComposeServiceViewController {
   private static let logger = Logger(
@@ -166,28 +166,36 @@ class ShareViewController: SLComposeServiceViewController {
   }
 
   func store(_ shareData: ShareData) throws {
-    var shareDataJsonString: String
+    let jsonEncoder = JSONEncoder()
+    var json: String
     do {
-      let shareDataJsonData = try JSONSerialization.data(withJSONObject: shareData)
-      shareDataJsonString = String(data: shareDataJsonData, encoding: String.Encoding.utf8)!
+      let jsonData = try jsonEncoder.encode(shareData)
+      json = String(data: jsonData, encoding: String.Encoding.utf8)!
     } catch {
       throw RNSMError("Failed to serialize share data: \(error)")
     }
-
-    try storeUserDefault([DATA_KEY: shareDataJsonString, MIME_TYPE_KEY: "text/json"], key: USER_DEFAULTS_KEY)
+    try storeUserDefault([DATA_KEY: json, MIME_TYPE_KEY: "text/json"], key: USER_DEFAULTS_KEY)
   }
 
   internal func openHostApp() {
+    openHostAppUrl()
+    completeRequest()
+  }
+
+  func openHostAppUrl() {
     guard let hostAppUrl = self.hostAppUrl else {
       failRequest("Cannot openHostApp because hostAppUrl was not initialized.")
       return
     }
-    guard let extensionContext = self.extensionContext else {
-      failRequest("Unable to open host app because there is no extension context.")
-      return
+    let selectorOpenURL = sel_registerName("openURL:")
+    var responder: UIResponder? = self
+
+    while responder != nil {
+      if responder?.responds(to: selectorOpenURL) == true {
+        responder?.perform(selectorOpenURL, with: hostAppUrl)
+      }
+      responder = responder!.next
     }
-    extensionContext.open(hostAppUrl)
-    completeRequest()
   }
 
   func completeRequest() {

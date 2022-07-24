@@ -21,5 +21,9 @@
   },
   "homepage": "https://github.com/meedan/react-native-share-menu",
   "license": "MIT",
-  "readmeFilename": "README.md"
+  "readmeFilename": "README.md",
+  "peerDependencies": {
+    "react": "^17.0",
+    "react-native": "^0.66"
+  }
 }

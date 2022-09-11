@@ -165,6 +165,14 @@ AppRegistry.registerComponent("ShareMenuModuleComponent", () => Share);
 
 Or check the "example" directory for an example application.
 
+## How it works
+
+See the diagrams. ([source](https://app.diagrams.net/#G141vgMH-CcbMPa_NY7HtDPb7LPW2lwrvc))
+
+<img src="diagrams/RNShareMenu-Classes.drawio.svg" width="47%">
+
+<img src="diagrams/RNShareMenu-iOS Share Sequence.drawio.svg" width="47%">
+
 ## How it looks
 
 ### Android

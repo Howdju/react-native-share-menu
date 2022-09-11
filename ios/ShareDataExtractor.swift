@@ -170,7 +170,7 @@ public struct ShareDataExtractor {
     guard let url = item as? URL else {
       throw RNSMError("File URL provider did not provide a URL.")
     }
-    let mimeType = self.extractMimeType(from: url)
+    let mimeType = try self.extractMimeType(from: url)
     return ExtractedValue(url.absoluteString, mimeType: mimeType, role: "provider/file-url")
   }
   
@@ -181,7 +181,7 @@ public struct ShareDataExtractor {
       guard (try? Data(contentsOf: imageUrl)) != nil else {
         throw RNSMError("Could not load contents of image URL.")
       }
-      let mimeType = self.extractMimeType(from: imageUrl)
+      let mimeType = try self.extractMimeType(from: imageUrl)
       return ExtractedValue(imageUrl.absoluteString, mimeType: mimeType, role: "provider/image/url")
     }
     
@@ -214,7 +214,7 @@ public struct ShareDataExtractor {
       return ExtractedValue(string, mimeType: "text/plain", role: "provider/data/string")
     }
     if let url = item as? URL {
-      let mimeType = self.extractMimeType(from: url)
+      let mimeType = try self.extractMimeType(from: url)
       return ExtractedValue(url.absoluteString, mimeType: mimeType, role: "provider/data/url")
     }
     if let dictionary = item as? NSDictionary {
@@ -258,19 +258,26 @@ public struct ShareDataExtractor {
     guard let results = dictionary.value(forKey: NSExtensionJavaScriptPreprocessingResultsKey) as? NSDictionary else {
       throw RNSMError("Property list provider dictionary was missing Javascript preprocessing results")
     }
-    return ExtractedValue(results.description, mimeType: "text/plain", role: "provider/property-list/javascript-preprocessing")
+    let jsonData = try JSONSerialization.data(withJSONObject: results)
+    let jsonString = String(data: jsonData, encoding: String.Encoding.utf8)!
+    return ExtractedValue(jsonString, mimeType: "text/json", role: "provider/property-list/javascript-preprocessing")
   }
   
-  static func extractMimeType(from url: URL) -> String {
+  static func extractMimeType(from url: URL) throws -> String {
     let fileExtension: CFString = url.pathExtension as CFString
     guard let extUTI = UTTypeCreatePreferredIdentifierForTag(
       kUTTagClassFilenameExtension,
       fileExtension,
       nil
-    )?.takeUnretainedValue() else { return "" }
+    )?.takeUnretainedValue() else {
+      throw RNSMError("Unable to infer MIME type for URL: \(url)")
+    }
     
-    guard let mimeUTI = UTTypeCopyPreferredTagWithClass(extUTI, kUTTagClassMIMEType)
-    else { return "" }
+    guard let mimeUTI = UTTypeCopyPreferredTagWithClass(
+      extUTI, kUTTagClassMIMEType
+    ) else {
+      throw RNSMError("Unable to infer MIME type for URL: \(url)")
+    }
     
     return mimeUTI.takeUnretainedValue() as String
   }

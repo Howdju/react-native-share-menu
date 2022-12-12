@@ -7,7 +7,7 @@ export interface SharePreviewResponse {
 // The data provided by the module to a React Native app
 export interface ShareResponse extends SharePreviewResponse {
   // iOS share extensions may optionally add extra data to the share response
-  extraData?: object,
+  extraData?: Record<string, unknown>,
 }
 
 // Since we dynamically recognize the MIME type from file extensions, it
@@ -17,11 +17,11 @@ type MimeType = string
 // The possible roles the iOS module can provide.
 //
 // See ShareDataExtractor for details
-type Role = 
+type Role =
   // attributedTitle as text
-  "title/text" 
+  "title/text"
   // attributedTitle as HTML
-  | "title/html" 
+  | "title/html"
   // attributedContentText as text
   | "content/text"
   // attributedContentText as HTML

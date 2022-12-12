@@ -174,7 +174,7 @@ class ShareViewController: SLComposeServiceViewController {
     } catch {
       throw RNSMError("Failed to serialize share data: \(error)")
     }
-    try storeUserDefault([DATA_KEY: shareDataDict], key: USER_DEFAULTS_KEY)
+    try storeUserDefault(shareDataDict, key: USER_DEFAULTS_KEY)
   }
 
   internal func openHostApp() {

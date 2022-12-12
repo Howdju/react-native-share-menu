@@ -14,27 +14,27 @@ public class ShareMenuReactView: NSObject {
     subsystem: Bundle.main.bundleIdentifier!,
     category: String(describing: ShareMenuReactView.self)
   )
-  
+
   static var viewDelegate: ReactShareViewDelegate?
-  
+
   @objc
   static public func requiresMainQueueSetup() -> Bool {
     return false
   }
-  
+
   public static func attachViewDelegate(_ delegate: ReactShareViewDelegate!) {
     guard (ShareMenuReactView.viewDelegate == nil) else {
       Self.logger.warning("Attempting to set view delegate when it is already set.")
       return
     }
-    
+
     ShareMenuReactView.viewDelegate = delegate
   }
-  
+
   public static func detachViewDelegate() {
     ShareMenuReactView.viewDelegate = nil
   }
-  
+
   @objc(dismissExtension:)
   func dismissExtension(_ errorMessage: String?) {
     guard let viewDelegate = Self.viewDelegate else {
@@ -43,27 +43,27 @@ public class ShareMenuReactView: NSObject {
     }
     viewDelegate.dismissExtension(errorMessage)
   }
-  
+
   @objc
   func openApp() {
     guard let viewDelegate = Self.viewDelegate else {
       Self.logger.error("continueInApp had no viewDelegate")
       return
     }
-    
+
     viewDelegate.openApp()
   }
-  
+
   @objc(continueInApp:)
   func continueInApp(_ extraData: [String:Any]?) {
     guard let viewDelegate = Self.viewDelegate else {
       Self.logger.error("continueInApp had no viewDelegate")
       return
     }
-    
+
     viewDelegate.continueInApp(with: extraData)
   }
-  
+
   @objc(data:reject:)
   func data(_
             resolve: @escaping RCTPromiseResolveBlock,
@@ -80,7 +80,7 @@ public class ShareMenuReactView: NSObject {
       case .success(let shareData):
         do {
           let shareDataDict = try shareData.toDict()
-          resolve([DATA_KEY: shareDataDict])
+          resolve(shareDataDict)
         } catch {
           let message = "Failed to convert shareData to dict: \(error)"
           Self.logger.error("\(message)")
